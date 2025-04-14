@@ -10,30 +10,48 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
 
-# Function to remove emojis
+# ======================
+# TEXT PREPROCESSING
+# ======================
 def remove_emojis(text):
-    emoji_pattern = re.compile("[" \
-                               u"\U0001F600-\U0001F64F"  # emoticons\
-                               u"\U0001F300-\U0001F5FF"  # symbols & pictographs\
-                               u"\U0001F680-\U0001F6FF"  # transport & map symbols\
-                               u"\U0001F1E0-\U0001F1FF"  # flags (iOS)\
-                               u"\U00002702-\U000027B0" \
-                               u"\U000024C2-\U0001F251" \
-                               "]", flags=re.UNICODE)
+    emoji_pattern = re.compile(
+        "["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        "]+",
+        flags=re.UNICODE
+    )
     return emoji_pattern.sub(r'', text)
 
 
-# Function to count words
-def count_words(text):
+def preprocess_text(text):
+    """Full preprocessing pipeline for review text"""
     if not text or text == "N/A":
-        return 0
+        return ""
+
+    # Step 1: Remove emojis
     text = remove_emojis(text)
-    text = re.sub(r'([a-zA-Z])\.([a-zA-Z])', r'\1 \2', text)
-    text = re.sub(r'([a-zA-Z])\/([a-zA-Z])', r'\1 \2', text)
-    text = re.sub(r'([a-zA-Z])\-([a-zA-Z])', r'\1 \2', text)
+
+    # Step 2: Handle special characters between letters
+    text = re.sub(r'([a-zA-Z])[\.\/\-]([a-zA-Z])', r'\1 \2', text)
+
+    # Step 3: Remove remaining special characters/punctuation
     text = re.sub(r'[^\w\s]', ' ', text)
-    words = text.split()
-    return len(words)
+
+    # Step 4: Clean whitespace and commas
+    text = text.replace("\n", " ").replace(",", " ")  # Protect CSV format
+    text = re.sub(r'\s+', ' ', text).strip()  # Collapse multiple spaces
+
+    return text
+
+
+def count_words(text):
+    """Count words in preprocessed text"""
+    return len(text.split()) if text else 0
 
 
 # Function to scroll until reviews load
@@ -53,7 +71,6 @@ def scroll_until_reviews_load(driver):
     print("Could not locate reviews section after scrolling.")
     return False
 
-
 # Paths
 chrome_driver_path = r"C:\Users\marce\Downloads\chromedriver-win64\chromedriver-win64\chromedriver.exe"
 brave_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -72,7 +89,7 @@ actions = ActionChains(driver)
 
 # Open the product page
 driver.get(
-    "https://www.lazada.com.ph/products/win-premium-treasures-2025gift-for-you-mobile-gadgets-and-accessories-awesome-freebies-mega-flash-specially-gift-for-you-i4943459256-s28804156813.html"
+"https://www.lazada.com.ph/products/33bags-korean-fashion-leather-chain-sling-bags-for-women-afforable-cod-freeshipping-bestseller-2004-i4918093964-s28661369412.html"
 )
 
 time.sleep(3)  # Allow page to load
@@ -90,11 +107,11 @@ csv_filename = f"reviews_{today_datetime}.csv"
 with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
     writer = csv.writer(file)
     writer.writerow(
-        ["Review", "Star Rating", "Length", "Valence", "Review Quantity", "Internal Consistency", "Review Quality",
-         "Credibility"])
+        ["Review", "Star Rating", "Length", "Valence", "Internal Consistency", "Argument Quality",
+         "Objectivity", "Completeness", "Template Flag", "Spam Flag", "Credibility"])
 
 
-    def get_total_review_count():
+    """ def get_total_review_count():
         try:
             review_count_element = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".pdp-mod-review .mod-rating .count"))
@@ -103,10 +120,10 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
             review_count = re.search(r'(\d+)', review_count_text).group(1)
             return review_count
         except:
-            return "N/A"
+            return "N/A" 
 
 
-    total_reviews = get_total_review_count()
+    total_reviews = get_total_review_count() """
 
 
     def scrape_reviews():
@@ -118,6 +135,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
                 return False
             for review in reviews:
                 try:
+                    # Get star rating
                     star_images = review.find_elements(By.CLASS_NAME, "star")
                     full_stars = sum(
                         "TB19ZvEgfDH8KJjy1XcXXcpdXXa-64-64.png" in star.get_attribute("src") for star in star_images
@@ -125,13 +143,18 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
                     star_rating = full_stars
                 except:
                     star_rating = "N/A"
+
+                # Get and preprocess review text
                 try:
-                    review_text = review.find_element(By.CLASS_NAME, "content").text.strip()
+                    raw_text = review.find_element(By.CLASS_NAME, "content").text.strip()
                 except:
-                    review_text = "N/A"
-                word_count = count_words(review_text)
-                review_text = review_text.replace("\n", " ").replace(",", " ")
-                writer.writerow([review_text, star_rating, word_count, "", total_reviews, "", "", ""])
+                    raw_text = "N/A"
+
+                cleaned_text = preprocess_text(raw_text)
+                word_count = count_words(cleaned_text)
+
+                # Write cleaned data to CSV
+                writer.writerow([cleaned_text, star_rating, word_count, "", "", "", "", "", "", "", ""])
             return True
         except:
             return False
