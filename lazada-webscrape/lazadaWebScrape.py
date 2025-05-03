@@ -9,49 +9,45 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
-
 # ======================
 # TEXT PREPROCESSING
 # ======================
-def remove_emojis(text):
-    emoji_pattern = re.compile(
-        "["
-        u"\U0001F600-\U0001F64F"  # emoticons
-        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-        u"\U0001F680-\U0001F6FF"  # transport & map symbols
-        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-        u"\U00002702-\U000027B0"
-        u"\U000024C2-\U0001F251"
-        "]+",
-        flags=re.UNICODE
-    )
-    return emoji_pattern.sub(r'', text)
-
-
 def preprocess_text(text):
-    """Full preprocessing pipeline for review text"""
+    """Minimal preprocessing: collapse excess whitespace while preserving dates, times, and currency amounts."""
     if not text or text == "N/A":
         return ""
 
-    # Step 1: Remove emojis
-    text = remove_emojis(text)
+    # Normalize newlines and tabs to spaces
+    text = text.replace("\n", " ").replace("\t", " ")
 
-    # Step 2: Handle special characters between letters
-    text = re.sub(r'([a-zA-Z])[\.\/\-]([a-zA-Z])', r'\1 \2', text)
+    # Define patterns for dates, times, and currency amounts
+    patterns = {
+        'DATE': r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|[A-Za-z]{3,9} \d{1,2}, \d{4})\b",
+        'TIME': r"\b\d{1,2}:\d{2}(?:\s?[APMapm]{2})?\b",
+        'CURRENCY': r"\b(?:\$|€|£)\s?\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?\b"
+    }
 
-    # Step 3: Remove remaining special characters/punctuation
-    text = re.sub(r'[^\w\s]', ' ', text)
+    # Mask matched substrings to placeholders
+    masks = {}
+    counts = {key: 0 for key in patterns}
+    for label, pat in patterns.items():
+        def _mask(m):
+            idx = counts[label]
+            placeholder = f"__{label}{idx}__"
+            masks[placeholder] = m.group(0)
+            counts[label] += 1
+            return placeholder
 
-    # Step 4: Clean whitespace and commas
-    text = text.replace("\n", " ").replace(",", " ")  # Protect CSV format
-    text = re.sub(r'\s+', ' ', text).strip()  # Collapse multiple spaces
+        text = re.sub(pat, _mask, text)
+
+    # Collapse all other excess whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    # Unmask placeholders back to original substrings
+    for placeholder, original in masks.items():
+        text = text.replace(placeholder, original)
 
     return text
-
-
-def count_words(text):
-    """Count words in preprocessed text"""
-    return len(text.split()) if text else 0
 
 
 # Function to scroll until reviews load
@@ -59,7 +55,7 @@ def scroll_until_reviews_load(driver):
     """Scroll down gradually until the reviews section appears."""
     scroll_pause_time = 1  # Adjust pause time if needed
     for _ in range(10):  # Scroll multiple times
-        driver.execute_script("window.scrollBy(0, 500);")  # Scroll down in steps
+        driver.execute_script("window.scrollBy(0, 500);")
         time.sleep(scroll_pause_time)
         try:
             reviews_section = driver.find_element(By.CLASS_NAME, "pdp-mod-review")
@@ -67,7 +63,7 @@ def scroll_until_reviews_load(driver):
                 print("Reviews section found!")
                 return True
         except:
-            pass  # Keep scrolling if not found
+            pass
     print("Could not locate reviews section after scrolling.")
     return False
 
@@ -89,7 +85,7 @@ actions = ActionChains(driver)
 
 # Open the product page
 driver.get(
-"https://www.lazada.com.ph/products/33bags-korean-fashion-leather-chain-sling-bags-for-women-afforable-cod-freeshipping-bestseller-2004-i4918093964-s28661369412.html"
+    "https://www.lazada.com.ph/products/pdp-i4937255353-s28882693231.html"
 )
 
 time.sleep(3)  # Allow page to load
@@ -106,25 +102,10 @@ csv_filename = f"reviews_{today_datetime}.csv"
 # Open CSV file
 with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
     writer = csv.writer(file)
-    writer.writerow(
-        ["Review", "Star Rating", "Length", "Valence", "Internal Consistency", "Argument Quality",
-         "Objectivity", "Completeness", "Template Flag", "Spam Flag", "Credibility"])
-
-
-    """ def get_total_review_count():
-        try:
-            review_count_element = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".pdp-mod-review .mod-rating .count"))
-            )
-            review_count_text = review_count_element.text.strip()
-            review_count = re.search(r'(\d+)', review_count_text).group(1)
-            return review_count
-        except:
-            return "N/A" 
-
-
-    total_reviews = get_total_review_count() """
-
+    writer.writerow([
+        "Review", "Star Rating", "Valence", "Internal Consistency", "Argument Quality",
+        "Objectivity", "Sidedness", "RIQ Score", "RIQ Label", "Template Flag", "Spam Flag", "CREDIBILITY"
+    ])
 
     def scrape_reviews():
         try:
@@ -134,8 +115,18 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
             if not reviews:
                 return False
             for review in reviews:
+                # Extract raw text
                 try:
-                    # Get star rating
+                    raw_text = review.find_element(By.CLASS_NAME, "content").text.strip()
+                except:
+                    raw_text = "N/A"
+
+                # Skip reviews with placeholder text
+                if raw_text == "N/A":
+                    continue
+
+                # Get star rating
+                try:
                     star_images = review.find_elements(By.CLASS_NAME, "star")
                     full_stars = sum(
                         "TB19ZvEgfDH8KJjy1XcXXcpdXXa-64-64.png" in star.get_attribute("src") for star in star_images
@@ -144,21 +135,13 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8-sig") as file:
                 except:
                     star_rating = "N/A"
 
-                # Get and preprocess review text
-                try:
-                    raw_text = review.find_element(By.CLASS_NAME, "content").text.strip()
-                except:
-                    raw_text = "N/A"
-
+                # Preprocess and write
                 cleaned_text = preprocess_text(raw_text)
-                word_count = count_words(cleaned_text)
-
-                # Write cleaned data to CSV
-                writer.writerow([cleaned_text, star_rating, word_count, "", "", "", "", "", "", "", ""])
+                writer.writerow([cleaned_text, star_rating, "", "", "", "", "", "", "", "", ""])
             return True
-        except:
+        except Exception as e:
+            print("Error scraping reviews:", e)
             return False
-
 
     def go_to_next_page():
         try:
