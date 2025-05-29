@@ -592,24 +592,29 @@ document.addEventListener('DOMContentLoaded', function() {
             
             let featureBreakdown = 'No API data';
             if (review.features && Object.keys(review.features).length > 0) {
-                featureBreakdown = Object.entries(featureLabels).map(([key, label]) => {
-                    const feature = review.features[key];
-                    const status = feature ? (feature.prediction === 1 ? 'Y' : 'N') : '?';
-                    const badFeatures = ['PD_F', 'PD_F_TMP', 'SPM'];
-                    const color = feature ? (
-                        badFeatures.includes(key) ? 
-                        (feature.prediction === 1 ? '#dc3545' : '#28a745') : 
-                        (feature.prediction === 1 ? '#28a745' : '#dc3545')
-                    ) : '#6c757d';
-                    
-                    return `<span style="color: ${color}; font-size: 9px;">${label}:${status}</span>`;
-                }).join(' ');
+                featureBreakdown = Object.entries(featureLabels)
+                    .map(([key, label]) => {
+                        const feature = review.features[key];
+                        //const status = feature ? (feature.prediction === 1 ? 'Y' : 'N') : '?';
+                        const badFeatures = ['PD_F', 'PD_F_TMP', 'SPM'];
+                        const color = feature ? (
+                            badFeatures.includes(key) ? 
+                            (feature.prediction === 1 ? '#dc3545' : '#28a745') : 
+                            (feature.prediction === 1 ? '#28a745' : '#dc3545')
+                        ) : '#6c757d';
+
+                        return { html: `<span style="color: ${color}; font-size: 9px; display: block; margin-top: 2px;">${label}</span>`, color };
+                    })
+                    .filter(item => item.color === '#dc3545') // only red
+                    .map(item => item.html)
+                    .join(' ');
             }
+
             
             const detailsHTML = `
                 <div style="font-size: 9px; color: #666; border-top: 1px solid #eee; padding-top: 4px;">
-                    <strong>Inconsistency:</strong> ${starDisplay} vs ${sentimentDisplay} | 
-                    <strong>Features:</strong> ${featureBreakdown}
+                    <div style="margin-bottom: 5px; display: none;"><strong>Inconsistency:</strong> ${starDisplay} vs ${sentimentDisplay}</div>
+                    <div><strong>Warning/s:</strong> ${featureBreakdown}</div>
                 </div>
             `;
             
