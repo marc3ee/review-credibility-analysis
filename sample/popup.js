@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         text = text.replace(/\n/g, " ").replace(/\t/g, " ").replace(/\r/g, " ");
                         
                         // Remove emojis
-                        text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2702}-\u{27B0}]|[\u{24C2}-\u{1F251}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+                        text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2702}-\u{27B0}]|[\u{24C2}-\u{1F251}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '.');
                         
                         // Clean Unicode and normalize
                         text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
@@ -378,8 +378,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const reviewsWithSentiment = await analyzeSentiment(reviews);
                 console.log('Analysis complete:', reviewsWithSentiment);
                 
-                // Show everything in popup (no page injection)
+                // Show everything in popup AND inject into page
                 displayResultsInPopup(reviewsWithSentiment);
+                
+                // Inject results into the actual Lazada page
+                await injectResultsIntoPage(reviewsWithSentiment, tab.id);
                 
                 // Scroll back up to review section after analysis
                 await chrome.scripting.executeScript({
@@ -533,11 +536,76 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Display everything in popup - individual reviews with badges + summary
+    // Display everything in popup - credibility at top, then individual reviews
     function displayResultsInPopup(reviews) {
         statusDiv.textContent = `Analysis complete! Found ${reviews.length} reviews.`;
         
-        // Individual reviews section first
+        // Calculate credibility distribution first
+        const credibilityCounts = { HIGH: 0, MODERATE: 0, LOW: 0 };
+        
+        reviews.forEach(review => {
+            const consistency = getConsistencyLabel(review.sentiment.label, review.starRating);
+            const authenticity = getAuthenticityScore(review.features);
+            const credibility = getCredibilityScore(consistency, authenticity);
+            credibilityCounts[credibility]++;
+        });
+        
+        // Calculate credibility percentages
+        const highCredibilityPercentage = Math.round((credibilityCounts.HIGH / reviews.length) * 100) || 0;
+        const moderateCredibilityPercentage = Math.round((credibilityCounts.MODERATE / reviews.length) * 100) || 0;
+        const lowCredibilityPercentage = Math.round((credibilityCounts.LOW / reviews.length) * 100) || 0;
+        
+        // Find dominant credibility
+        const maxCount = Math.max(...Object.values(credibilityCounts));
+        const dominantCredibility = Object.entries(credibilityCounts).find(([_, count]) => count === maxCount)[0];
+        
+        // 1. CREDIBILITY DISTRIBUTION AT TOP (Enhanced and bigger)
+        const credibilityDiv = document.createElement('div');
+        credibilityDiv.style.cssText = 'margin-top: 15px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; font-size: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);';
+        
+        credibilityDiv.innerHTML = `
+            <div style="text-align: center; margin-bottom: 15px;">
+                <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">CREDIBILITY ANALYSIS</div>
+                <div style="font-size: 11px; color: rgba(255,255,255,0.8);">${reviews.length} reviews analyzed</div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 15px;">
+                <div style="text-align: center; ${dominantCredibility === 'HIGH' ? 'transform: scale(1.15); z-index: 2;' : ''}">
+                    <div style="font-size: ${dominantCredibility === 'HIGH' ? '24px' : '20px'}; font-weight: bold; color: #90EE90; ${dominantCredibility === 'HIGH' ? 'text-shadow: 0 0 10px rgba(144,238,144,0.5);' : ''}">
+                        ${highCredibilityPercentage}%
+                    </div>
+                    <div style="font-size: 10px; color: rgba(255,255,255,0.9);">HIGH</div>
+                    <div style="font-size: 9px; color: rgba(255,255,255,0.7);">(${credibilityCounts.HIGH})</div>
+                </div>
+                <div style="text-align: center; ${dominantCredibility === 'MODERATE' ? 'transform: scale(1.15); z-index: 2;' : ''}">
+                    <div style="font-size: ${dominantCredibility === 'MODERATE' ? '24px' : '20px'}; font-weight: bold; color: #FFD700; ${dominantCredibility === 'MODERATE' ? 'text-shadow: 0 0 10px rgba(255,215,0,0.5);' : ''}">
+                        ${moderateCredibilityPercentage}%
+                    </div>
+                    <div style="font-size: 10px; color: rgba(255,255,255,0.9);">MODERATE</div>
+                    <div style="font-size: 9px; color: rgba(255,255,255,0.7);">(${credibilityCounts.MODERATE})</div>
+                </div>
+                <div style="text-align: center; ${dominantCredibility === 'LOW' ? 'transform: scale(1.15); z-index: 2;' : ''}">
+                    <div style="font-size: ${dominantCredibility === 'LOW' ? '24px' : '20px'}; font-weight: bold; color: #FFB6C1; ${dominantCredibility === 'LOW' ? 'text-shadow: 0 0 10px rgba(255,182,193,0.5);' : ''}">
+                        ${lowCredibilityPercentage}%
+                    </div>
+                    <div style="font-size: 10px; color: rgba(255,255,255,0.9);">LOW</div>
+                    <div style="font-size: 9px; color: rgba(255,255,255,0.7);">(${credibilityCounts.LOW})</div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
+                <div style="font-size: 13px; font-weight: bold; color: ${getCredibilityGlowColor(dominantCredibility)}; text-shadow: 0 0 8px ${getCredibilityGlowColor(dominantCredibility)};">
+                    DOMINANT: ${dominantCredibility} CREDIBILITY
+                </div>
+                <div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 3px;">
+                    ${getCredibilityMessage(dominantCredibility)}
+                </div>
+            </div>
+        `;
+        
+        resultsDiv.appendChild(credibilityDiv);
+        
+        // 2. INDIVIDUAL REVIEWS SECTION
         const reviewsDiv = document.createElement('div');
         reviewsDiv.style.cssText = 'margin-top: 15px; max-height: 250px; overflow-y: auto;';
         
@@ -583,11 +651,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Feature breakdown
             const featureLabels = {
-                'PD_F': 'Template',
-                'PD_F_TMP': 'Phrases',
-                'MAN_UI': 'Manual',
-                'QUAL': 'Quality', 
-                'SPM': 'Spam'
+                'PD_F': 'Used template for reviewing the product\'s features',
+                'PD_F_TMP': 'Used Lazada template',
+                'MAN_UI': 'Low user input',
+                'QUAL': 'Low on information', 
+                'SPM': 'Potential spam'
             };
             
             let featureBreakdown = 'No API data';
@@ -595,7 +663,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 featureBreakdown = Object.entries(featureLabels)
                     .map(([key, label]) => {
                         const feature = review.features[key];
-                        //const status = feature ? (feature.prediction === 1 ? 'Y' : 'N') : '?';
                         const badFeatures = ['PD_F', 'PD_F_TMP', 'SPM'];
                         const color = feature ? (
                             badFeatures.includes(key) ? 
@@ -613,8 +680,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const detailsHTML = `
                 <div style="font-size: 9px; color: #666; border-top: 1px solid #eee; padding-top: 4px;">
-                    <div style="margin-bottom: 5px; display: none;"><strong>Inconsistency:</strong> ${starDisplay} vs ${sentimentDisplay}</div>
-                    <div><strong>Warning/s:</strong> ${featureBreakdown}</div>
+                    <div style="margin-bottom: 5px;"><strong>In)consistency:</strong> ${starDisplay} vs ${sentimentDisplay}</div>
+                    <div><strong>Authenticity Warning/s:</strong> ${featureBreakdown}</div>
                 </div>
             `;
             
@@ -624,12 +691,10 @@ document.addEventListener('DOMContentLoaded', function() {
         
         resultsDiv.appendChild(reviewsDiv);
         
-        // Summary section at the bottom
+        // 3. SUMMARY SECTION AT BOTTOM (Simplified)
         const sentimentCounts = { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0 };
         const consistencyCounts = { CONSISTENT: 0, 'PARTIALLY CONSISTENT': 0, INCONSISTENT: 0, UNKNOWN: 0 };
         const authenticityCounts = { HIGH: 0, MODERATE: 0, LOW: 0, UNKNOWN: 0 };
-        const credibilityCounts = { HIGH: 0, MODERATE: 0, LOW: 0 };
-        const starCounts = {};
         
         reviews.forEach(review => {
             sentimentCounts[review.sentiment.label]++;
@@ -639,17 +704,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const authenticity = getAuthenticityScore(review.features);
             authenticityCounts[authenticity]++;
-            
-            const credibility = getCredibilityScore(consistency, authenticity);
-            credibilityCounts[credibility]++;
-            
-            if (review.starRating) {
-                starCounts[review.starRating] = (starCounts[review.starRating] || 0) + 1;
-            }
         });
         
         const summaryDiv = document.createElement('div');
-        summaryDiv.style.cssText = 'margin-top: 15px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; font-size: 11px;';
+        summaryDiv.style.cssText = 'margin-top: 15px; padding: 10px; background: #f8f9fa; color: #333; border-radius: 6px; font-size: 10px; border: 1px solid #ddd;';
         
         const consistencySummary = Object.entries(consistencyCounts)
             .filter(([_, count]) => count > 0)
@@ -660,55 +718,327 @@ document.addEventListener('DOMContentLoaded', function() {
             .filter(([_, count]) => count > 0)
             .map(([authenticity, count]) => `${authenticity}: ${count}`)
             .join(' | ');
-            
-        const credibilitySummary = Object.entries(credibilityCounts)
-            .filter(([_, count]) => count > 0)
-            .map(([credibility, count]) => {
-                const percentage = Math.round((count / reviews.length) * 100);
-                return `${credibility}: ${count} (${percentage}%)`;
-            })
-            .join(' | ');
-        
-        // Calculate credibility percentages for big display
-        const highCredibilityPercentage = Math.round((credibilityCounts.HIGH / reviews.length) * 100) || 0;
-        const moderateCredibilityPercentage = Math.round((credibilityCounts.MODERATE / reviews.length) * 100) || 0;
-        const lowCredibilityPercentage = Math.round((credibilityCounts.LOW / reviews.length) * 100) || 0;
         
         summaryDiv.innerHTML = `
-            <div style="text-align: center; margin-bottom: 8px;">
-                <strong style="font-size: 13px;">Summary</strong>
+            <div style="text-align: center; margin-bottom: 6px;">
+                <strong style="font-size: 11px;">Additional Details</strong>
             </div>
-            <div style="font-size: 10px; line-height: 1.4;">
+            <div style="font-size: 9px; line-height: 1.4;">
                 <strong>Consistency:</strong> ${consistencySummary}<br>
-                <strong>Authenticity:</strong> ${authenticitySummary}<br>
-            </div>
-            <div style="margin-top: 10px; text-align: center;">
-                <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">
-                    <strong>Credibility Distribution</strong>
-                </div>
-                <div style="display: flex; justify-content: space-around; align-items: center;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 18px; font-weight: bold; color: #90EE90;">
-                            ${highCredibilityPercentage}%
-                        </div>
-                        <div style="font-size: 9px; color: rgba(255,255,255,0.9);">HIGH</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 18px; font-weight: bold; color: #FFD700;">
-                            ${moderateCredibilityPercentage}%
-                        </div>
-                        <div style="font-size: 9px; color: rgba(255,255,255,0.9);">MODERATE</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 18px; font-weight: bold; color: #FFB6C1;">
-                            ${lowCredibilityPercentage}%
-                        </div>
-                        <div style="font-size: 9px; color: rgba(255,255,255,0.9);">LOW</div>
-                    </div>
-                </div>
+                <strong>Authenticity:</strong> ${authenticitySummary}
             </div>
         `;
         resultsDiv.appendChild(summaryDiv);
+    }
+
+    // NEW FUNCTION: Inject results into the actual Lazada page
+    async function injectResultsIntoPage(reviewsWithSentiment, tabId) {
+        try {
+            console.log('Injecting results into Lazada page...');
+            
+            await chrome.scripting.executeScript({
+                target: {tabId: tabId},
+                func: (reviewsData) => {
+                    console.log('Starting page injection with data:', reviewsData);
+                    
+                    // Helper functions for injection (need to be redefined in page context)
+                    function getConsistencyLabel(sentiment, starRating) {
+                        if (!starRating) return 'UNKNOWN';
+                        
+                        const consistencyMap = {
+                            'POSITIVE': {
+                                5: 'CONSISTENT',
+                                4: 'PARTIALLY CONSISTENT',
+                                3: 'INCONSISTENT',
+                                2: 'INCONSISTENT', 
+                                1: 'INCONSISTENT'
+                            },
+                            'NEUTRAL': {
+                                5: 'INCONSISTENT',
+                                4: 'PARTIALLY CONSISTENT',
+                                3: 'CONSISTENT',
+                                2: 'PARTIALLY CONSISTENT',
+                                1: 'INCONSISTENT'
+                            },
+                            'NEGATIVE': {
+                                5: 'INCONSISTENT',
+                                4: 'INCONSISTENT',
+                                3: 'PARTIALLY CONSISTENT',
+                                2: 'CONSISTENT',
+                                1: 'CONSISTENT'
+                            }
+                        };
+                        
+                        return consistencyMap[sentiment]?.[starRating] || 'UNKNOWN';
+                    }
+
+                    function getAuthenticityScore(features) {
+                        const pdF = features.PD_F?.prediction || 0;
+                        const pdFTmp = features.PD_F_TMP?.prediction || 0;
+                        const manUI = features.MAN_UI?.prediction || 0;
+                        const qual = features.QUAL?.prediction || 0;
+                        const spm = features.SPM?.prediction || 0;
+                        
+                        if (manUI === 0) {
+                            return 'LOW';
+                        }
+                        
+                        const pattern = `(${pdF},${pdFTmp},${manUI},${qual},${spm})`;
+                        
+                        const lowPatterns = [
+                            '(0,0,1,0,0)', '(1,0,1,0,0)', '(0,1,1,0,0)', '(1,1,1,0,0)',
+                            '(0,1,1,0,1)', '(1,0,1,0,1)', '(1,1,1,0,1)', '(0,0,1,0,1)'
+                        ];
+                        
+                        const moderatePatterns = [
+                            '(1,1,1,1,0)', '(1,1,1,1,1)',
+                            '(0,1,1,1,1)', '(1,0,1,1,1)'
+                        ];
+                        
+                        const highPatterns = [
+                            '(0,1,1,1,0)', '(1,0,1,1,0)', '(0,0,1,1,0)'
+                        ];
+                        
+                        if (lowPatterns.includes(pattern)) {
+                            return 'LOW';
+                        } else if (moderatePatterns.includes(pattern)) {
+                            return 'MODERATE';
+                        } else if (highPatterns.includes(pattern)) {
+                            return 'HIGH';
+                        } else {
+                            return 'MODERATE';
+                        }
+                    }
+
+                    function getCredibilityScore(consistency, authenticity) {
+                        const credibilityMap = {
+                            'CONSISTENT': {
+                                'HIGH': 'HIGH',
+                                'MODERATE': 'HIGH', 
+                                'LOW': 'MODERATE'
+                            },
+                            'PARTIALLY CONSISTENT': {
+                                'HIGH': 'HIGH',
+                                'MODERATE': 'MODERATE',
+                                'LOW': 'LOW'
+                            },
+                            'INCONSISTENT': {
+                                'HIGH': 'MODERATE',
+                                'MODERATE': 'LOW',
+                                'LOW': 'LOW'
+                            }
+                        };
+                        
+                        return credibilityMap[consistency]?.[authenticity] || 'LOW';
+                    }
+
+                    function getConsistencyColor(consistency) {
+                        switch(consistency) {
+                            case 'CONSISTENT': return '#28a745';
+                            case 'PARTIALLY CONSISTENT': return '#ffc107';
+                            case 'INCONSISTENT': return '#dc3545';
+                            default: return '#6c757d';
+                        }
+                    }
+
+                    function getAuthenticityColor(authenticity) {
+                        switch(authenticity) {
+                            case 'HIGH': return '#28a745';
+                            case 'MODERATE': return '#ffc107';
+                            case 'LOW': return '#dc3545';
+                            default: return '#6c757d';
+                        }
+                    }
+
+                    function getCredibilityColor(credibility) {
+                        switch(credibility) {
+                            case 'HIGH': return '#28a745';
+                            case 'MODERATE': return '#ffc107';
+                            case 'LOW': return '#dc3545';
+                            default: return '#6c757d';
+                        }
+                    }
+
+                    function getCredibilityGradientColor(credibility) {
+                        switch(credibility) {
+                            case 'HIGH': return '#20c997';
+                            case 'MODERATE': return '#fd7e14';
+                            case 'LOW': return '#e74c3c';
+                            default: return '#868e96';
+                        }
+                    }
+                    
+                    // Find all review items on the page
+                    const reviewItems = document.querySelectorAll('.pdp-mod-review .mod-reviews .item, .review-item, [class*="review-item"]');
+                    console.log(`Found ${reviewItems.length} review items on page for injection`);
+                    
+                    let matchedReviews = 0;
+                    
+                    reviewItems.forEach((reviewItem, index) => {
+                        try {
+                            // Remove any existing injected badges first
+                            const existingBadges = reviewItem.querySelector('.credibility-analysis-badges');
+                            if (existingBadges) {
+                                existingBadges.remove();
+                            }
+                            
+                            // Get review text for matching
+                            let reviewText = '';
+                            const contentSelectors = ['.content', '.review-content', '.review-text', '[class*="content"]'];
+                            
+                            for (const selector of contentSelectors) {
+                                const contentElement = reviewItem.querySelector(selector);
+                                if (contentElement) {
+                                    reviewText = contentElement.textContent.trim();
+                                    break;
+                                }
+                            }
+                            
+                            if (!reviewText || reviewText.length < 10) {
+                                console.log(`Skipping review ${index} - no text found`);
+                                return;
+                            }
+                            
+                            // Find matching review from our analysis
+                            let matchingReviewData = null;
+                            
+                            for (const reviewData of reviewsData) {
+                                // Try to match by text similarity
+                                const similarity = calculateTextSimilarity(reviewText, reviewData.text);
+                                if (similarity > 0.8) { // 80% similarity threshold
+                                    matchingReviewData = reviewData;
+                                    break;
+                                }
+                            }
+                            
+                            if (!matchingReviewData) {
+                                console.log(`No matching data found for review ${index}`);
+                                return;
+                            }
+                            
+                            console.log(`Injecting badges for review ${index}`);
+                            
+                            // Calculate scores
+                            const consistency = getConsistencyLabel(matchingReviewData.sentiment.label, matchingReviewData.starRating);
+                            const authenticity = getAuthenticityScore(matchingReviewData.features);
+                            const credibility = getCredibilityScore(consistency, authenticity);
+                            
+                            // Find the target location (.bottom div)
+                            let targetLocation = reviewItem.querySelector('.bottom');
+                            
+                            // If .bottom not found, try alternative selectors
+                            if (!targetLocation) {
+                                const alternatives = [
+                                    '.item-content .bottom',
+                                    '[class*="bottom"]',
+                                    '.review-bottom',
+                                    '[class*="review-bottom"]'
+                                ];
+                                
+                                for (const altSelector of alternatives) {
+                                    targetLocation = reviewItem.querySelector(altSelector);
+                                    if (targetLocation) break;
+                                }
+                            }
+                            
+                            // If still no target, create one at the end of the review item
+                            if (!targetLocation) {
+                                targetLocation = reviewItem;
+                            }
+                            
+                            // Create badges container
+                            const badgesContainer = document.createElement('div');
+                            badgesContainer.className = 'credibility-analysis-badges';
+                            badgesContainer.style.cssText = `
+                                margin-top: 8px; 
+                                padding: 8px; 
+                                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); 
+                                border-radius: 6px; 
+                                border: 1px solid #e9ecef;
+                                font-family: Arial, sans-serif;
+                                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+                                text-align: center;
+                            `;
+                            
+                            // Create label text
+                            const labelText = document.createElement('span');
+                            labelText.style.cssText = `
+                                font-size: 9px;
+                                color: #6c757d;
+                                font-weight: bold;
+                                margin-right: 6px;
+                                letter-spacing: 0.3px;
+                            `;
+                            labelText.textContent = 'InCrediView Classification:';
+                            
+                            // Create the credibility badge
+                            const credibilityBadge = document.createElement('span');
+                            credibilityBadge.style.cssText = `
+                                background: linear-gradient(135deg, ${getCredibilityColor(credibility)} 0%, ${getCredibilityGradientColor(credibility)} 100%); 
+                                color: white; 
+                                padding: 5px 10px; 
+                                border-radius: 14px; 
+                                font-weight: bold; 
+                                font-size: 9px;
+                                text-transform: uppercase;
+                                box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+                                border: 1px solid white;
+                                letter-spacing: 0.5px;
+                                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+                                display: inline-block;
+                                margin-left: 2px;
+                            `;
+                            credibilityBadge.textContent = `${credibility} CREDIBILITY`;
+                            
+                            badgesContainer.appendChild(labelText);
+                            badgesContainer.appendChild(credibilityBadge);
+                            
+                            // Insert the badges after the target location
+                            if (targetLocation === reviewItem) {
+                                // Append to the end of review item
+                                targetLocation.appendChild(badgesContainer);
+                            } else {
+                                // Insert after the .bottom div
+                                targetLocation.parentNode.insertBefore(badgesContainer, targetLocation.nextSibling);
+                            }
+                            
+                            matchedReviews++;
+                            
+                        } catch (error) {
+                            console.error(`Error injecting badges for review ${index}:`, error);
+                        }
+                    });
+                    
+                    console.log(`Successfully injected badges for ${matchedReviews} reviews`);
+                    
+                    // Text similarity function
+                    function calculateTextSimilarity(text1, text2) {
+                        // Simple similarity check - normalize and compare
+                        const normalize = (text) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+                        const norm1 = normalize(text1);
+                        const norm2 = normalize(text2);
+                        
+                        if (norm1 === norm2) return 1.0;
+                        
+                        // Check if one is substring of another
+                        if (norm1.includes(norm2) || norm2.includes(norm1)) return 0.9;
+                        
+                        // Word-based similarity
+                        const words1 = norm1.split(' ');
+                        const words2 = norm2.split(' ');
+                        const commonWords = words1.filter(word => words2.includes(word));
+                        
+                        return commonWords.length / Math.max(words1.length, words2.length);
+                    }
+                },
+                args: [reviewsWithSentiment]
+            });
+            
+            console.log('Page injection completed');
+            
+        } catch (error) {
+            console.error('Error injecting results into page:', error);
+        }
     }
 
     function getCredibilityScore(consistency, authenticity) {
@@ -740,6 +1070,24 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'MODERATE': return '#ffc107';
             case 'LOW': return '#dc3545';
             default: return '#6c757d';
+        }
+    }
+
+    function getCredibilityGlowColor(credibility) {
+        switch(credibility) {
+            case 'HIGH': return '#90EE90';
+            case 'MODERATE': return '#FFD700';
+            case 'LOW': return '#FFB6C1';
+            default: return '#FFFFFF';
+        }
+    }
+
+    function getCredibilityMessage(credibility) {
+        switch(credibility) {
+            case 'HIGH': return 'Most reviews appear trustworthy';
+            case 'MODERATE': return 'Reviews show mixed reliability signals';
+            case 'LOW': return 'Many reviews show concerning patterns';
+            default: return 'Analysis complete';
         }
     }
 

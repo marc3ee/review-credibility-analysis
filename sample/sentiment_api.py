@@ -122,7 +122,9 @@ def extract_template_features(text):
     text_clean = str(text).strip()
     words = text_clean.split() if text_clean else []
 
-    # Basic text features
+    # =============================================================================
+    # BASIC TEXT FEATURES
+    # =============================================================================
     features['char_length'] = len(text_clean)
     features['word_count'] = len(words)
     features['sentence_count'] = len(re.split(r'[.!?]+', text_clean)) - 1
@@ -140,7 +142,11 @@ def extract_template_features(text):
         features['alpha_ratio'] = features['digit_ratio'] = features['space_ratio'] = 0
         features['punct_ratio'] = features['upper_ratio'] = 0
 
-    # Spam detection features
+    # =============================================================================
+    # SPAM DETECTION FEATURES
+    # =============================================================================
+
+    # 1. Repetitive Text Detection
     if words:
         word_freq = Counter(words)
         most_common_freq = word_freq.most_common(1)[0][1]
@@ -150,13 +156,14 @@ def extract_template_features(text):
         features['word_repetition_ratio'] = 0
         features['unique_word_ratio'] = 0
 
-    # Character-level repetition patterns
+    # 2. Character-level repetition patterns
     if text_clean:
         char_freq = Counter(text_clean.lower())
         most_common_char_freq = char_freq.most_common(1)[0][1]
         features['char_repetition_ratio'] = most_common_char_freq / len(text_clean)
 
-        consecutive_chars = re.findall(r'(.)\1{2,}', text_clean.lower())
+        # Consecutive character repetition
+        consecutive_chars = re.findall(r'(.)\1{2,}', text_clean.lower())  # 3+ same chars in a row
         features['consecutive_char_groups'] = len(consecutive_chars)
         features['max_consecutive_chars'] = max([len(match) + 1 for match in consecutive_chars], default=0)
     else:
@@ -164,7 +171,8 @@ def extract_template_features(text):
         features['consecutive_char_groups'] = 0
         features['max_consecutive_chars'] = 0
 
-    # Vowel to consonant ratio
+    # 3. Random/Nonsensical patterns
+    # Vowel to consonant ratio (natural language has patterns)
     vowels = 'aeiouAEIOU'
     if text_clean:
         vowel_count = sum(1 for c in text_clean if c in vowels)
@@ -173,11 +181,11 @@ def extract_template_features(text):
     else:
         features['vowel_consonant_ratio'] = 0
 
-    # Random sequences
+    # Character sequence patterns (randomness indicators)
     features['has_random_sequences'] = bool(re.search(r'[a-z]{10,}', text_clean.lower()))
     features['has_number_sequences'] = bool(re.search(r'\d{5,}', text_clean))
 
-    # Punctuation features
+    # 4. Excessive punctuation patterns
     features['dot_count'] = text_clean.count('.')
     features['comma_count'] = text_clean.count(',')
     features['colon_count'] = text_clean.count(':')
@@ -185,63 +193,94 @@ def extract_template_features(text):
     features['question_count'] = text_clean.count('?')
     features['total_punct_count'] = sum(not c.isalnum() and not c.isspace() for c in text_clean)
 
+    # Specific punctuation sequence patterns
     features['dot_comma_count'] = text_clean.count('.,')
     features['comma_space_count'] = text_clean.count(', ')
     features['colon_space_count'] = text_clean.count(': ')
 
+    # Excessive punctuation sequences
     features['excessive_dots'] = len(re.findall(r'\.{3,}', text_clean))
     features['excessive_commas'] = len(re.findall(r',{2,}', text_clean))
     features['excessive_colons'] = len(re.findall(r':{2,}', text_clean))
     features['excessive_exclamations'] = len(re.findall(r'!{2,}', text_clean))
     features['punct_density'] = features['total_punct_count'] / max(1, len(text_clean))
 
-    # Short content detection
+    # 5. Very short/minimal content
     features['is_very_short'] = len(text_clean.strip()) <= 3
     features['is_single_word'] = len(words) == 1
     features['is_single_char'] = len(text_clean.strip()) == 1
 
-    # Extended character patterns
+    # 6. Extended character patterns (like "goooooood")
     extended_patterns = re.findall(r'(\w)\1{3,}', text_clean.lower())
     features['extended_char_patterns'] = len(extended_patterns)
     features['has_extended_chars'] = len(extended_patterns) > 0
 
-    # Keyboard mashing detection
+    # 7. Keyboard mashing detection
+    # Common keyboard sequences
     keyboard_patterns = ['qwerty', 'asdf', 'zxcv', '123', 'abc', 'qaz', 'wsx']
     features['keyboard_mashing'] = any(pattern in text_clean.lower() for pattern in keyboard_patterns)
+
+    # Random alternating pattern
     features['alternating_pattern'] = bool(re.search(r'([a-z])\1*([a-z])\2*\1', text_clean.lower()))
 
-    # Template detection features
+    # Enhanced nonsense detection
+    random_sequences = re.findall(r'\b[a-z]{8,}\b', text_clean.lower())
+    features['random_word_count'] = len(random_sequences)
+    features['has_random_words'] = len(random_sequences) > 0
+
+    repetitive_patterns = re.findall(r'\b(\w{2,3})\1{2,}\b', text_clean.lower())
+    features['repetitive_nonsense'] = len(repetitive_patterns)
+    features['has_repetitive_nonsense'] = len(repetitive_patterns) > 0
+
+    # Additional gibberish patterns for attribute values
+    weird_sequences = re.findall(r'\b[a-z]*[0-9]+[a-z]*\b', text_clean.lower())  # Mixed letters/numbers
+    consonant_heavy = re.findall(r'\b[bcdfghjklmnpqrstvwxyz]{5,}\b', text_clean.lower())  # Too many consonants
+    features['weird_sequences'] = len(weird_sequences)
+    features['consonant_heavy_words'] = len(consonant_heavy)
+
+    # =============================================================================
+    # TEMPLATE DETECTION FEATURES (from previous implementation)
+    # =============================================================================
+
+    # Punctuation & Formatting Patterns - Enhanced colon detection
     colon_pairs = len(re.findall(r'\b\w+:\s*\w+', text_clean))
     features['colon_pairs'] = colon_pairs
     features['colon_density'] = colon_pairs / max(1, len(words))
     features['attribute_pattern'] = bool(re.search(r'(\w+:\s*\w+.*){2,}', text_clean))
 
+    # NEW: Single attribute detection (attribute + colon pattern)
     single_attributes = re.findall(r'\b\w+:', text_clean)
     features['single_attribute_count'] = len(single_attributes)
     features['single_attribute_density'] = len(single_attributes) / max(1, len(words))
     features['has_single_attributes'] = len(single_attributes) > 0
 
+    # Extract unique attribute words for analysis
     attribute_words = [attr.replace(':', '') for attr in single_attributes]
     features['unique_attributes'] = len(set(attribute_words))
 
+    # Common template attribute words
     common_attributes = [
         'design', 'quality', 'price', 'material', 'size', 'color', 'weight',
         'sound', 'battery', 'comfort', 'durability', 'packaging', 'delivery',
-        'service', 'value', 'performance', 'rating', 'review', 'product'
+        'service', 'value', 'performance', 'rating', 'review', 'product',
+        'portability', 'build', 'appearance', 'style', 'function', 'usability', 'reliability'
     ]
 
-    template_attribute_matches = sum(1 for attr in attribute_words if attr.lower() in common_attributes)
+    template_attribute_matches = sum(1 for attr in attribute_words
+                                   if attr.lower() in common_attributes)
     features['template_attribute_count'] = template_attribute_matches
     features['template_attribute_ratio'] = template_attribute_matches / max(1, len(attribute_words))
 
+    # Separator consistency (moved to avoid duplication)
     features['semicolon_count'] = text_clean.count(';')
 
-    # Template phrases and keywords
+    # Lexical Repetition Patterns for templates
     value_words = ['good', 'great', 'perfect', 'excellent', 'amazing', 'nice', 'awesome', 'fantastic']
     value_word_count = sum(text_clean.lower().count(word) for word in value_words)
     features['value_word_count'] = value_word_count
     features['value_word_density'] = value_word_count / max(1, len(words))
 
+    # Template phrases - Enhanced detection
     template_phrases = [
         'great value for money', 'perfect for', 'ideal for', 'highly recommend',
         'easy to use', 'good quality', 'fast delivery', 'excellent service',
@@ -252,22 +291,27 @@ def extract_template_features(text):
     ]
     features['template_phrase_count'] = sum(1 for phrase in template_phrases if phrase in text_clean.lower())
     features['has_template_phrases'] = features['template_phrase_count'] > 0
+    features['has_any_template_phrase'] = features['template_phrase_count'] > 0
 
+    # Enhanced template phrase detection - partial matches
     template_keywords = [
         'durable', 'long-lasting', 'stylish', 'comfortable', 'perfect',
         'versatile', 'practical', 'recommend', 'excellent', 'amazing',
         'fantastic', 'great', 'nice', 'good quality', 'high quality'
     ]
 
-    template_keyword_matches = sum(1 for keyword in template_keywords if keyword in text_clean.lower())
+    template_keyword_matches = sum(1 for keyword in template_keywords
+                                 if keyword in text_clean.lower())
     features['template_keyword_count'] = template_keyword_matches
     features['template_keyword_density'] = template_keyword_matches / max(1, len(words))
 
-    # Mixed pattern detection
+    # MIXED PATTERN DETECTION - Template + Natural combination
+    # Detect structured beginning + natural ending
     has_early_attributes = bool(re.search(r'^[^.!?]*\w+:\s*\w+', text_clean))
-    has_natural_continuation = bool(re.search(r'[.!?]\s*[a-z]', text_clean))
+    has_natural_continuation = bool(re.search(r'[.!?]\s*[a-z]', text_clean))  # lowercase after punctuation
     features['mixed_structure_pattern'] = has_early_attributes and has_natural_continuation
 
+    # Template-to-natural transition detection
     sentences_with_colons = [s for s in re.split(r'[.!?]+', text_clean) if ':' in s]
     sentences_without_colons = [s for s in re.split(r'[.!?]+', text_clean) if ':' not in s and s.strip()]
 
@@ -275,6 +319,7 @@ def extract_template_features(text):
     features['natural_sentences'] = len(sentences_without_colons)
     features['structure_transition_ratio'] = len(sentences_with_colons) / max(1, len(sentences_without_colons))
 
+    # Comma-separated template values after colons
     colon_segments = re.findall(r'\w+:\s*([^,.:!?]+)', text_clean)
     template_like_segments = 0
     for segment in colon_segments:
@@ -285,22 +330,199 @@ def extract_template_features(text):
     features['template_value_segments'] = template_like_segments
     features['template_value_ratio'] = template_like_segments / max(1, len(colon_segments))
 
+    # Adjective diversity
     adjectives = value_words + ['nice', 'bad', 'terrible', 'okay', 'fine']
     text_adjectives = [word for word in words if word.lower() in adjectives]
     features['unique_adjectives'] = len(set(text_adjectives))
     features['adjective_diversity'] = features['unique_adjectives'] / max(1, len(text_adjectives))
 
-    # Language and structure patterns
-    features['has_mixed_language'] = bool(re.search(r'[^\x00-\x7F]', text_clean))
+    # Attribute + gibberish pattern detection (enhanced to handle spaces)
+    # Pattern 1: "attribute:gibberish" (no space after colon)
+    attribute_gibberish_nospace = re.findall(r'\b\w+:[a-z]{6,}', text_clean.lower())
+    # Pattern 2: "attribute: gibberish" (space after colon)
+    attribute_gibberish_space = re.findall(r'\b\w+:\s+[a-z]{6,}', text_clean.lower())
+    # Pattern 3: "attribute:value gibberish" (value followed by gibberish)
+    attribute_value_gibberish = re.findall(r'\b\w+:\s*\w+\s+[a-z]{6,}', text_clean.lower())
 
+    total_gibberish_patterns = len(attribute_gibberish_nospace) + len(attribute_gibberish_space) + len(attribute_value_gibberish)
+    features['attribute_gibberish_count'] = total_gibberish_patterns
+    features['has_attribute_gibberish'] = total_gibberish_patterns > 0
+
+    # Enhanced repeated values detection (handles both spaced and non-spaced)
+    attribute_values_nospace = re.findall(r'\b\w+:([a-z]+)', text_clean.lower())
+    attribute_values_space = re.findall(r'\b\w+:\s+([a-z]+)', text_clean.lower())
+    all_attribute_values = attribute_values_nospace + attribute_values_space
+
+    if all_attribute_values:
+        value_freq = Counter(all_attribute_values)
+        most_common_value_freq = value_freq.most_common(1)[0][1]
+        features['repeated_value_ratio'] = most_common_value_freq / len(all_attribute_values)
+        features['has_repeated_values'] = most_common_value_freq > 1
+
+        # Check if most values are gibberish (6+ random chars)
+        gibberish_values = sum(1 for val in all_attribute_values if len(val) >= 6 and val.isalpha())
+        features['gibberish_value_ratio'] = gibberish_values / len(all_attribute_values)
+        features['has_mostly_gibberish_values'] = features['gibberish_value_ratio'] > 0.5
+    else:
+        features['repeated_value_ratio'] = 0
+        features['has_repeated_values'] = False
+        features['gibberish_value_ratio'] = 0
+        features['has_mostly_gibberish_values'] = False
+
+    # =============================================================================
+    # LANGUAGE AND STRUCTURE PATTERNS
+    # =============================================================================
+
+    # Mixed language detection (basic)
+    features['has_mixed_language'] = bool(re.search(r'[^\x00-\x7F]', text_clean))  # Non-ASCII chars
+
+    # Sentence structure
     complete_sentences = [s for s in re.split(r'[.!?]+', text_clean)
                          if s.strip() and re.search(r'\b(is|are|was|were|have|has|do|does|will|can|should|the|a|an)\b', s.lower())]
     features['complete_sentences'] = len(complete_sentences)
     features['fragment_ratio'] = 1 - (len(complete_sentences) / max(1, features['sentence_count']))
 
+    # Grammatical patterns
     features['has_articles'] = bool(re.search(r'\b(the|a|an)\b', text_clean.lower()))
     features['has_pronouns'] = bool(re.search(r'\b(i|you|he|she|it|we|they|me|him|her|us|them)\b', text_clean.lower()))
     features['has_verbs'] = bool(re.search(r'\b(is|are|was|were|have|has|do|does|will|can|should|go|get|make|take)\b', text_clean.lower()))
+
+    # =============================================================================
+    # COMPREHENSIVE SPAM SCORING SYSTEM
+    # =============================================================================
+
+    spam_score = 0
+    template_score = 0
+
+    # === HIGH SPAM INDICATORS (0.4 each) ===
+
+    # 1. Attribute gibberish patterns
+    if features['has_attribute_gibberish']:
+        spam_score += 0.4
+
+    # 2. Mostly gibberish values in attributes
+    if features['has_mostly_gibberish_values']:
+        spam_score += 0.4
+
+    # 3. Multiple random sequences OR weird patterns
+    if features['random_word_count'] >= 2 or features['weird_sequences'] >= 2 or features['consonant_heavy_words'] >= 2:
+        spam_score += 0.4
+
+    # 4. Attribute + random word combination (strong spam indicator)
+    if features['colon_pairs'] >= 2 and (features['random_word_count'] >= 1 or features['weird_sequences'] >= 1):
+        spam_score += 0.4
+
+    # === MEDIUM SPAM INDICATORS (0.3 each) ===
+
+    # 4. Pure attribute spam (multiple attributes, no natural language)
+    if (features['colon_pairs'] >= 3 and
+        not features['has_articles'] and not features['has_pronouns'] and
+        features['word_count'] <= features['colon_pairs'] * 2):
+        spam_score += 0.3
+
+    # 5. Repeated simple values across attributes
+    if features['has_repeated_values'] and features['colon_pairs'] >= 2:
+        spam_score += 0.3
+
+    # 6. High template phrase density (multiple template phrases in short text)
+    template_phrase_density = features['template_phrase_count'] / max(1, features['word_count'] / 10)
+    if template_phrase_density > 1.5:  # More than 1.5 template phrases per 10 words
+        spam_score += 0.3
+
+    # === TEMPLATE INDICATORS (separate scoring) ===
+
+    # 7. Multiple colon pairs
+    if features['colon_pairs'] >= 3:
+        template_score += 0.3
+    elif features['colon_pairs'] >= 2:
+        template_score += 0.2
+
+    # 8. High template attribute ratio
+    if features['template_attribute_ratio'] > 0.7:
+        template_score += 0.3
+
+    # 9. Multiple template phrases
+    if features['template_phrase_count'] >= 3:
+        template_score += 0.3
+    elif features['template_phrase_count'] >= 2:
+        template_score += 0.2
+
+    # 10. High simple value word density
+    simple_value_density = features['value_word_count'] / max(1, features['word_count'])
+    if simple_value_density > 0.5:  # More than 50% simple value words
+        template_score += 0.3
+    elif simple_value_density > 0.3:
+        template_score += 0.2
+
+    # 11. Low adjective diversity with template patterns
+    if (features['adjective_diversity'] < 0.5 and
+        (features['colon_pairs'] > 0 or features['template_phrase_count'] > 0)):
+        template_score += 0.2
+
+    # === MIXED PATTERN DETECTION ===
+
+    # 12. Template + attribute mixed patterns
+    if features['colon_pairs'] >= 2 and features['template_phrase_count'] >= 1:
+        mixed_boost = 0.3
+        spam_score += mixed_boost
+        template_score += mixed_boost
+
+    # 13. Natural + spam mixed (unnatural insertion of structured content)
+    # Only flag if it's clearly spam insertion, not natural mentions
+    if (features['has_articles'] and features['has_pronouns'] and
+        features['colon_pairs'] >= 2 and features['word_count'] > 8 and
+        (features['random_word_count'] > 0 or not features['has_verbs'])):
+        spam_score += 0.2  # Only if it has suspicious patterns
+
+    # === LOW-LEVEL INDICATORS (0.1 each) ===
+
+    # 14. Repetitive nonsense
+    if features['has_repetitive_nonsense']:
+        spam_score += 0.1
+
+    # 15. Low unique word ratio
+    if features['unique_word_ratio'] < 0.6:
+        spam_score += 0.1
+
+    # 16. Unnatural vowel/consonant ratio
+    if features['vowel_consonant_ratio'] < 0.3 or features['vowel_consonant_ratio'] > 2.0:
+        spam_score += 0.1
+
+    # 17. High fragment ratio with structured content
+    if features['fragment_ratio'] > 0.7 and features['colon_pairs'] > 0:
+        spam_score += 0.1
+
+    # === SPECIAL CASE DETECTION ===
+
+    # 18. Short template spam (few words, all template-like)
+    if (features['word_count'] <= 8 and
+        (features['template_phrase_count'] >= 1 or simple_value_density > 0.4) and
+        not features['has_pronouns']):
+        template_score += 0.4
+
+    # 19. Pure attribute list spam (no natural language at all)
+    if (features['colon_pairs'] >= 2 and
+        features['word_count'] <= features['colon_pairs'] * 2.5 and
+        not features['has_articles'] and not features['has_pronouns'] and not features['has_verbs']):
+        spam_score += 0.4
+
+    # === FINAL SCORING ===
+
+    # Take maximum of spam_score and template_score, but combine for mixed patterns
+    final_spam_score = max(spam_score, template_score)
+
+    # Bonus for clear spam patterns
+    if spam_score > 0.5 and template_score > 0.3:
+        final_spam_score = min(1.0, final_spam_score + 0.2)
+
+    features['spam_probability_score'] = min(1.0, final_spam_score)
+    features['template_probability_score'] = min(1.0, template_score)
+    features['is_likely_spam'] = final_spam_score > 0.5
+    features['is_likely_template'] = template_score > 0.5
+
+    # Additional diagnostic features
+    features['template_phrase_density'] = template_phrase_density
+    features['simple_value_density'] = simple_value_density
 
     return features
 
@@ -392,10 +614,21 @@ def predict_features(text):
                 'description': target_descriptions[target]
             }
         
+        # Add the new spam and template scoring features to the response
+        spam_features = {
+            'spam_probability_score': template_features.get('spam_probability_score', 0),
+            'template_probability_score': template_features.get('template_probability_score', 0),
+            'is_likely_spam': template_features.get('is_likely_spam', False),
+            'is_likely_template': template_features.get('is_likely_template', False),
+            'template_phrase_density': template_features.get('template_phrase_density', 0),
+            'simple_value_density': template_features.get('simple_value_density', 0)
+        }
+        
         return {
             'original_text': text,
             'preprocessed_text': clean_text,
-            'feature_predictions': predictions
+            'feature_predictions': predictions,
+            'spam_template_analysis': spam_features
         }
         
     except Exception as e:
