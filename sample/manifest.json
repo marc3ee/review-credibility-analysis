@@ -1,18 +1,53 @@
 {
-    "manifest_version": 3,
-    "name": "Simple Alert Extension",
-    "version": "1.0",
-    "description": "Shows an alert when clicked",
-    "action": {
-      "default_popup": "popup.html",
-      "default_title": "Click me for alert"
-    },
-    "permissions": ["activeTab", "scripting"],
-    "host_permissions": ["http://localhost:5000/*"],
-    "content_scripts": [
-      {
-        "matches": ["<all_urls>"],
-        "js": ["content.js"]
-      }
-    ]
-  }
+  "manifest_version": 3,
+  "name": "InCrediView - Review Credibility Analyzer",
+  "version": "2.0",
+  "description": "Analyze review credibility on Lazada with comprehensive sentiment analysis and authenticity detection",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.lazada.com.ph/*",
+    "https://lazada.com.ph/*",
+    "https://www.lazada.com/*",
+    "https://lazada.com/*",
+    "http://localhost:5000/*",
+    "http://127.0.0.1:5000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "InCrediView - Review Credibility Analyzer"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.lazada.com.ph/*",
+        "https://lazada.com.ph/*",
+        "https://www.lazada.com/*",
+        "https://lazada.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup.html",
+        "popup.js"
+      ],
+      "matches": [
+        "https://www.lazada.com.ph/*",
+        "https://lazada.com.ph/*",
+        "https://www.lazada.com/*",
+        "https://lazada.com/*"
+      ]
+    }
+  ]
+}

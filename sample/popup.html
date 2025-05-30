@@ -3,16 +3,22 @@
 <head>
     <style>
         body {
-            width: 450px;
+            width: 500px;
             height: auto;
             padding: 15px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
         button {
-            width: 100%;
+            flex: 1;
             padding: 12px;
-            font-size: 16px;
+            font-size: 14px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
@@ -31,6 +37,21 @@
             transform: translateY(0);
         }
         
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        #webScrapeButton {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        
+        #webScrapeButton:hover {
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        
         #status {
             margin-top: 12px;
             font-size: 12px;
@@ -44,7 +65,7 @@
         
         #results {
             margin-top: 12px;
-            max-height: 350px;
+            max-height: 400px;
             overflow-y: auto;
             font-size: 12px;
         }
@@ -128,6 +149,88 @@
             color: #666;
             font-size: 12px;
         }
+
+        /* Star rating summary styling */
+        .star-summary {
+            margin: 10px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .star-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .star-rating {
+            font-size: 16px;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .star-credibility {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .overall-summary {
+            margin-top: 15px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .overall-credibility {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            font-size: 11px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 18px;
+            font-weight: bold;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -136,7 +239,11 @@
         <p>Focused on Inconsistency & Authenticity</p>
     </div>
     
-    <button id="findReviewsButton">Find & Analyze Reviews</button>
+    <div class="button-container">
+        <button id="findReviewsButton">Analyze Current Page</button>
+        <button id="webScrapeButton">Deep Scrape Analysis</button>
+    </div>
+    
     <div id="status" style="display: none;"></div>
     <div id="results"></div>
     
