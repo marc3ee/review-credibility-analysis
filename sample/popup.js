@@ -1405,7 +1405,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const badFeatures = ['PD_F', 'PD_F_TMP', 'SPM'];
                         const isWarning = badFeatures.includes(key) ? 
                             (feature.prediction === 1) : 
-                            (feature.prediction === 0 && key === 'MAN_UI') || (feature.prediction === 1 && key === 'QUAL');
+                            (feature.prediction === 0 && key === 'MAN_UI') || (feature.prediction === 0 && key === 'QUAL');
                         
                         if (isWarning) {
                             warningFeatures.push(label);
@@ -1616,7 +1616,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                             }
                             
-                            if (!reviewText || reviewText.length < 10) {
+                            if (!reviewText) {
                                 console.log(`Skipping review ${index} - no text found`);
                                 return;
                             }
